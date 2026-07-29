@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SentimentLens</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+    :root {
+        --bg: #0a0f14;
+        --panel: #101820;
+        --panel-border: #1e2d38;
+        --accent: #38bdf8;
+        --accent-dim: #0ea5e9;
+        --text: #e6f2f7;
+        --text-dim: #8ea3ae;
+        --positive: #4ade80;
+        --negative: #f87171;
+        --neutral: #facc15;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+        overflow-x: hidden;
+        width: 100%;
+    }
+
+    #particle-bg {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        pointer-events: none;
+    }
+
+    body {
+        margin: 0;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        position: relative;
+        overflow-x: hidden;
+    }
+
+    .container {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+        position: relative;
+        z-index: 1;
+    }
+
+    header {
+        text-align: center;
+        margin-bottom: 36px;
+    }
+
+    header h1 {
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        margin: 0;
+        background: linear-gradient(135deg, var(--text) 30%, var(--accent) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    header p {
+        color: var(--text-dim);
+        font-size: 14px;
+        margin-top: 8px;
+    }
+
+    .panel {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        padding: 24px;
+        margin-bottom: 20px;
+        transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .panel:hover {
+        border-color: var(--accent-dim);
+        box-shadow: 0 8px 24px rgba(14,165,233,0.12);
+    }
+
+    textarea {
+        width: 100%;
+        min-height: 160px;
+        background: #0d1520;
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        padding: 14px;
+        color: var(--text);
+        font-size: 14px;
+        font-family: inherit;
+        resize: vertical;
+        outline: none;
+    }
+
+    textarea:focus {
+        border-color: var(--accent-dim);
+    }
+
+    textarea::placeholder {
+        color: var(--text-dim);
+    }
+
+    .hint {
+        font-size: 12px;
+        color: var(--text-dim);
+        margin-top: 8px;
+    }
+
+    button {
+        background: var(--accent-dim);
+        color: #08131a;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        margin-top: 14px;
+        transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    button:hover {
+        background: var(--accent);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(56,189,248,0.35);
+    }
+
+    button:active {
+        transform: translateY(0);
+    }
+
+    #loading-notice {
+        display: none;
+        text-align: center;
+        color: var(--text-dim);
+        font-size: 13px;
+        margin-top: 12px;
+    }
+
+    #results-section {
+        display: none;
+    }
+
+    #results-section h3 {
+        margin: 0 0 16px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    canvas {
+        max-height: 220px;
+    }
+
+    .summary-row {
+        display: flex;
+        gap: 14px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+    }
+
+    .summary-card {
+        flex: 1;
+        min-width: 220px;
+        background: #0d1520;
+        border-radius: 10px;
+        padding: 14px 16px;
+        border-left: 3px solid var(--positive);
+        transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .summary-card:hover {
+        transform: translateY(-3px);
+        background: #111c28;
+    }
+
+    .summary-card.complaints {
+        border-left-color: var(--negative);
+    }
+
+    .summary-card .label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-dim);
+        margin-bottom: 6px;
+    }
+
+    .summary-card .text {
+        font-size: 14px;
+        line-height: 1.4;
+    }
+
+    .review-list {
+        margin-top: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 320px;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    .review-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        background: #0d1520;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 13px;
+        transition: background 0.15s ease, transform 0.15s ease;
+        min-width: 0;
+    }
+
+    .review-item span:last-child {
+        flex: 1;
+        min-width: 0;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+
+    .review-item:hover {
+        background: #131f2b;
+        transform: translateX(4px);
+    }
+
+    .tag {
+        flex-shrink: 0;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 20px;
+        text-transform: uppercase;
+    }
+
+    .tag.Positive { background: rgba(74,222,128,0.15); color: var(--positive); }
+    .tag.Negative { background: rgba(248,113,113,0.15); color: var(--negative); }
+    .tag.Neutral { background: rgba(250,204,21,0.15); color: var(--neutral); }
+
+    .mode-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+        justify-content: center;
+    }
+
+    .mode-tab {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        color: var(--text-dim);
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .mode-tab.active {
+        background: var(--accent-dim);
+        color: #08131a;
+        border-color: var(--accent-dim);
+        font-weight: 700;
+    }
+
+    .csv-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+    }
+
+    input[type="file"] {
+        color: var(--text-dim);
+        font-size: 13px;
+    }
+
+    .action-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .secondary-btn {
+        background: transparent;
+        border: 1px solid var(--panel-border);
+        color: var(--text-dim);
+    }
+
+    .secondary-btn:hover {
+        background: #131f2b;
+        color: var(--text);
+        box-shadow: none;
+        transform: none;
+    }
+
+    #wordcloud-img {
+        width: 100%;
+        border-radius: 8px;
+        margin-top: 10px;
+        display: none;
+    }
+
+    .filter-hint {
+        font-size: 12px;
+        color: var(--text-dim);
+        text-align: center;
+        margin-top: 8px;
+    }
+
+    .compare-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+
+    @media (max-width: 600px) {
+        .compare-grid { grid-template-columns: 1fr; }
+    }
+
+    .compare-col h4 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        color: var(--text-dim);
+        text-transform: uppercase;
+    }
+
+    /* Toast notifications */
+    #toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .toast {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-left: 4px solid var(--accent-dim);
+        border-radius: 8px;
+        padding: 12px 18px;
+        font-size: 13px;
+        color: var(--text);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        animation: toastIn 0.25s ease, toastOut 0.25s ease 2.75s;
+        max-width: 320px;
+    }
+
+    .toast.error { border-left-color: var(--negative); }
+    .toast.success { border-left-color: var(--positive); }
+
+    @keyframes toastIn {
+        from { opacity: 0; transform: translateX(30px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes toastOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+    }
+
+    /* Spinner */
+    .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(56,189,248,0.25);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        display: inline-block;
+        animation: spin 0.7s linear infinite;
+        vertical-align: middle;
+        margin-right: 8px;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Fade transitions for mode panels and results */
+    .fade-panel {
+        animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Drag and drop zone */
+    .drop-zone {
+        border: 2px dashed var(--panel-border);
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        color: var(--text-dim);
+        font-size: 13px;
+        cursor: pointer;
+        transition: border-color 0.2s ease, background 0.2s ease;
+        margin-top: 10px;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+        border-color: var(--accent-dim);
+        background: rgba(56,189,248,0.05);
+    }
+
+    .drop-zone input[type="file"] {
+        display: none;
+    }
+
+    .drop-zone .filename {
+        color: var(--accent);
+        font-weight: 600;
+        margin-top: 6px;
+        display: block;
+    }
+
+    .btn-icon {
+        margin-right: 6px;
+    }
+</style>
+</head>
+<body>
+<canvas id="particle-bg"></canvas>
+<div id="toast-container"></div>
+<div class="container">
+    <header>
+        <h1>SentimentLens</h1>
+        <p>Paste reviews and get an instant sentiment breakdown</p>
+    </header>
+
+    <div class="mode-tabs">
+        <div class="mode-tab active" onclick="switchMode('single')" id="tab-single">Analyze</div>
+        <div class="mode-tab" onclick="switchMode('compare')" id="tab-compare">Compare</div>
+    </div>
+
+    <div class="panel" id="single-mode-panel">
+        <textarea id="reviews-input" placeholder="Paste reviews here, one per line:&#10;&#10;Great product, works exactly as described!&#10;Battery life is disappointing, dies too fast.&#10;It's okay, nothing special."></textarea>
+        <div class="hint">Enter one review per line</div>
+
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csvInput').click()">
+            <span id="drop-zone-text">📄 Click to choose a CSV, or drag one here</span>
+            <span class="filename" id="drop-zone-filename"></span>
+            <input type="file" id="csvInput" accept=".csv" onchange="handleFileSelect()">
+        </div>
+
+        <div class="action-row">
+            <button onclick="analyzeReviews()"><span class="btn-icon">🔍</span>Analyze</button>
+            <button class="secondary-btn" onclick="uploadCSV()" id="csv-analyze-btn" style="display:none;"><span class="btn-icon">📊</span>Analyze CSV</button>
+        </div>
+        <div id="loading-notice">Analyzing reviews, this may take a moment...</div>
+    </div>
+
+    <div class="panel" id="compare-mode-panel" style="display: none;">
+        <div class="compare-grid">
+            <div>
+                <div class="hint" style="margin-bottom: 8px;">Batch A</div>
+                <textarea id="batch-a-input" placeholder="Reviews for batch A, one per line..." style="min-height: 120px;"></textarea>
+            </div>
+            <div>
+                <div class="hint" style="margin-bottom: 8px;">Batch B</div>
+                <textarea id="batch-b-input" placeholder="Reviews for batch B, one per line..." style="min-height: 120px;"></textarea>
+            </div>
+        </div>
+        <button onclick="compareReviews()"><span class="btn-icon">⚖️</span>Compare</button>
+        <div id="compare-loading-notice" style="display:none;" class="hint">Comparing batches, this may take a moment...</div>
+    </div>
+
+    <div class="panel" id="results-section" style="display: none;">
+        <h3>Sentiment breakdown</h3>
+        <canvas id="sentimentChart"></canvas>
+        <div class="filter-hint">Click a segment to filter the reviews below</div>
+
+        <div class="summary-row" style="margin-top: 12px;">
+            <div class="summary-card" style="border-left-color: var(--positive); text-align:center;">
+                <div class="label">Positive</div>
+                <div class="text" id="count-positive" style="font-size:22px; font-weight:700; color: var(--positive);">0%</div>
+            </div>
+            <div class="summary-card" style="border-left-color: var(--negative); text-align:center;">
+                <div class="label">Negative</div>
+                <div class="text" id="count-negative" style="font-size:22px; font-weight:700; color: var(--negative);">0%</div>
+            </div>
+            <div class="summary-card" style="border-left-color: var(--neutral); text-align:center;">
+                <div class="label">Neutral</div>
+                <div class="text" id="count-neutral" style="font-size:22px; font-weight:700; color: var(--neutral);">0%</div>
+            </div>
+        </div>
+
+        <div class="summary-row">
+            <div class="summary-card">
+                <div class="label">Common praise</div>
+                <div class="text" id="praise-text"></div>
+            </div>
+            <div class="summary-card complaints">
+                <div class="label">Common complaints</div>
+                <div class="text" id="complaints-text"></div>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 28px;">Word cloud</h3>
+        <img id="wordcloud-img" alt="Word cloud">
+
+        <h3 style="margin-top: 28px;">Individual reviews</h3>
+        <div class="review-list" id="review-list"></div>
+
+        <div class="action-row" style="margin-top: 20px;">
+            <button class="secondary-btn" onclick="downloadReport()"><span class="btn-icon">⬇️</span>Export report</button>
+        </div>
+    </div>
+
+    <div class="panel" id="compare-results-section" style="display: none;">
+        <h3>Comparison</h3>
+        <div class="compare-grid">
+            <div class="compare-col">
+                <h4>Batch A</h4>
+                <canvas id="chartA"></canvas>
+                <div class="summary-card" style="margin-top: 14px;">
+                    <div class="label">Praise</div>
+                    <div class="text" id="praise-a"></div>
+                </div>
+                <div class="summary-card complaints" style="margin-top: 10px;">
+                    <div class="label">Complaints</div>
+                    <div class="text" id="complaints-a"></div>
+                </div>
+                <div class="review-list" id="review-list-a" style="max-height: 240px;"></div>
+            </div>
+            <div class="compare-col">
+                <h4>Batch B</h4>
+                <canvas id="chartB"></canvas>
+                <div class="summary-card" style="margin-top: 14px;">
+                    <div class="label">Praise</div>
+                    <div class="text" id="praise-b"></div>
+                </div>
+                <div class="summary-card complaints" style="margin-top: 10px;">
+                    <div class="label">Complaints</div>
+                    <div class="text" id="complaints-b"></div>
+                </div>
+                <div class="review-list" id="review-list-b" style="max-height: 240px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Animated particle background
+    (function initParticles() {
+        const canvas = document.getElementById('particle-bg');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resize() {
+            canvas.width = document.documentElement.clientWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const particleCount = Math.min(60, Math.floor(window.innerWidth / 20));
+        for (let i = 0; i < particleCount; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 0.3,
+                vy: (Math.random() - 0.5) * 0.3,
+                r: Math.random() * 1.8 + 0.6
+            });
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+
+                if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+                if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.5)';
+                ctx.fill();
+
+                // Draw connecting lines between nearby particles
+                for (let j = i + 1; j < particles.length; j++) {
+                    const q = particles[j];
+                    const dist = Math.hypot(p.x - q.x, p.y - q.y);
+                    if (dist < 120) {
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(q.x, q.y);
+                        ctx.strokeStyle = `rgba(56, 189, 248, ${0.12 * (1 - dist / 120)})`;
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+        animate();
+    })();
+
+    let sentimentChart = null;
+    let chartA = null;
+    let chartB = null;
+    let allClassifications = [];
+
+    // Toast notification system
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    // Animated count-up for percentage numbers
+    function animateCount(element, targetValue, suffix = '%') {
+        const duration = 600;
+        const start = performance.now();
+        function step(now) {
+            const progress = Math.min((now - start) / duration, 1);
+            const current = (targetValue * progress).toFixed(1);
+            element.textContent = current + suffix;
+            if (progress < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    // Drag and drop handling for CSV zone
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            document.getElementById('csvInput').files = e.dataTransfer.files;
+            handleFileSelect();
+        }
+    });
+
+    function handleFileSelect() {
+        const csvInput = document.getElementById('csvInput');
+        const filenameSpan = document.getElementById('drop-zone-filename');
+        const csvBtn = document.getElementById('csv-analyze-btn');
+        if (csvInput.files.length) {
+            filenameSpan.textContent = csvInput.files[0].name;
+            csvBtn.style.display = 'inline-block';
+            showToast(`Selected ${csvInput.files[0].name}`, 'success');
+        }
+    }
+
+    function switchMode(mode) {
+        document.getElementById('tab-single').classList.toggle('active', mode === 'single');
+        document.getElementById('tab-compare').classList.toggle('active', mode === 'compare');
+
+        const singlePanel = document.getElementById('single-mode-panel');
+        const comparePanel = document.getElementById('compare-mode-panel');
+
+        singlePanel.style.display = mode === 'single' ? 'block' : 'none';
+        comparePanel.style.display = mode === 'compare' ? 'block' : 'none';
+        singlePanel.classList.toggle('fade-panel', mode === 'single');
+        comparePanel.classList.toggle('fade-panel', mode === 'compare');
+
+        document.getElementById('results-section').style.display = 'none';
+        document.getElementById('compare-results-section').style.display = 'none';
+    }
+
+    async function analyzeReviews() {
+        const input = document.getElementById('reviews-input').value.trim();
+        const loadingNotice = document.getElementById('loading-notice');
+        const resultsSection = document.getElementById('results-section');
+
+        if (!input) {
+            showToast('Please paste at least one review', 'error');
+            return;
+        }
+
+        loadingNotice.innerHTML = '<span class="spinner"></span>Analyzing reviews, this may take a moment...';
+        loadingNotice.style.display = 'block';
+        resultsSection.style.display = 'none';
+
+        try {
+            const response = await fetch('/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reviews: input })
+            });
+
+            const data = await response.json();
+            loadingNotice.style.display = 'none';
+
+            if (data.error) {
+                showToast('Error: ' + data.error, 'error');
+                return;
+            }
+
+            renderResults(data);
+            resultsSection.style.display = 'block';
+            resultsSection.classList.add('fade-panel');
+            loadWordCloud();
+            showToast('Analysis complete', 'success');
+        } catch (err) {
+            loadingNotice.style.display = 'none';
+            showToast('Something went wrong. Is the server running?', 'error');
+        }
+    }
+
+    async function uploadCSV() {
+        const csvInput = document.getElementById('csvInput');
+        const loadingNotice = document.getElementById('loading-notice');
+        const resultsSection = document.getElementById('results-section');
+
+        if (!csvInput.files.length) {
+            showToast('Please choose a CSV file first', 'error');
+            return;
+        }
+
+        loadingNotice.innerHTML = '<span class="spinner"></span>Reading CSV and analyzing reviews...';
+        loadingNotice.style.display = 'block';
+        resultsSection.style.display = 'none';
+
+        const formData = new FormData();
+        formData.append('file', csvInput.files[0]);
+
+        try {
+            const response = await fetch('/analyze-csv', { method: 'POST', body: formData });
+            const data = await response.json();
+            loadingNotice.style.display = 'none';
+
+            if (data.error) {
+                showToast('Error: ' + data.error, 'error');
+                return;
+            }
+
+            renderResults(data);
+            resultsSection.style.display = 'block';
+            resultsSection.classList.add('fade-panel');
+            loadWordCloud();
+            showToast('CSV analyzed successfully', 'success');
+        } catch (err) {
+            loadingNotice.style.display = 'none';
+            showToast('Something went wrong. Is the server running?', 'error');
+        }
+    }
+
+    function renderResults(data) {
+        document.getElementById('praise-text').textContent = data.common_praise;
+        document.getElementById('complaints-text').textContent = data.common_complaints;
+        allClassifications = data.classifications;
+
+        animateCount(document.getElementById('count-positive'), data.breakdown.Positive);
+        animateCount(document.getElementById('count-negative'), data.breakdown.Negative);
+        animateCount(document.getElementById('count-neutral'), data.breakdown.Neutral);
+
+        const ctx = document.getElementById('sentimentChart').getContext('2d');
+        if (sentimentChart) sentimentChart.destroy();
+
+        sentimentChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Positive', 'Negative', 'Neutral'],
+                datasets: [{
+                    data: [data.breakdown.Positive, data.breakdown.Negative, data.breakdown.Neutral],
+                    backgroundColor: ['#4ade80', '#f87171', '#facc15'],
+                    borderColor: '#101820',
+                    borderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                onClick: (evt, elements) => {
+                    if (elements.length > 0) {
+                        const labels = ['Positive', 'Negative', 'Neutral'];
+                        const clickedLabel = labels[elements[0].index];
+                        filterReviews(clickedLabel);
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#e6f2f7' },
+                        onClick: (evt, item) => filterReviews(item.text)
+                    }
+                }
+            }
+        });
+
+        renderReviewList(allClassifications);
+    }
+
+    function renderReviewList(list) {
+        const listDiv = document.getElementById('review-list');
+        if (list.length === 0) {
+            listDiv.innerHTML = '<div class="hint">No reviews match this filter.</div>';
+            return;
+        }
+        listDiv.innerHTML = list.map(c =>
+            `<div class="review-item">
+                <span class="tag ${c.sentiment}">${c.sentiment}</span>
+                <span>${c.text}</span>
+            </div>`
+        ).join('');
+    }
+
+    let activeFilter = null;
+    function filterReviews(sentiment) {
+        if (activeFilter === sentiment) {
+            activeFilter = null;
+            renderReviewList(allClassifications);
+        } else {
+            activeFilter = sentiment;
+            renderReviewList(allClassifications.filter(c => c.sentiment === sentiment));
+        }
+    }
+
+    async function loadWordCloud() {
+        const img = document.getElementById('wordcloud-img');
+        img.style.display = 'none';
+        try {
+            const response = await fetch('/wordcloud?t=' + Date.now());
+            if (!response.ok) return;
+            const blob = await response.blob();
+            img.src = URL.createObjectURL(blob);
+            img.style.display = 'block';
+        } catch (err) {
+            // Word cloud is optional - fail silently
+        }
+    }
+
+    function downloadReport() {
+        showToast('Preparing your report...', 'info');
+        window.location.href = '/export-report';
+    }
+
+    async function compareReviews() {
+        const batchA = document.getElementById('batch-a-input').value.trim();
+        const batchB = document.getElementById('batch-b-input').value.trim();
+        const loadingNotice = document.getElementById('compare-loading-notice');
+        const resultsSection = document.getElementById('compare-results-section');
+
+        if (!batchA || !batchB) {
+            showToast('Please fill in both batches', 'error');
+            return;
+        }
+
+        loadingNotice.innerHTML = '<span class="spinner"></span>Comparing batches, this may take a moment...';
+        loadingNotice.style.display = 'block';
+        resultsSection.style.display = 'none';
+
+        try {
+            const response = await fetch('/compare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ batch_a: batchA, batch_b: batchB })
+            });
+
+            const data = await response.json();
+            loadingNotice.style.display = 'none';
+
+            if (data.error) {
+                showToast('Error: ' + data.error, 'error');
+                return;
+            }
+
+            renderCompareChart('chartA', data.batch_a.breakdown);
+            renderCompareChart('chartB', data.batch_b.breakdown);
+            document.getElementById('praise-a').textContent = data.batch_a.common_praise;
+            document.getElementById('complaints-a').textContent = data.batch_a.common_complaints;
+            document.getElementById('praise-b').textContent = data.batch_b.common_praise;
+            document.getElementById('complaints-b').textContent = data.batch_b.common_complaints;
+
+            renderCompareReviewList('review-list-a', data.batch_a.classifications);
+            renderCompareReviewList('review-list-b', data.batch_b.classifications);
+
+            resultsSection.style.display = 'block';
+            resultsSection.classList.add('fade-panel');
+            showToast('Comparison complete', 'success');
+        } catch (err) {
+            loadingNotice.style.display = 'none';
+            showToast('Something went wrong. Is the server running?', 'error');
+        }
+    }
+
+    function renderCompareReviewList(containerId, classifications) {
+        const listDiv = document.getElementById(containerId);
+        listDiv.innerHTML = classifications.map(c =>
+            `<div class="review-item">
+                <span class="tag ${c.sentiment}">${c.sentiment}</span>
+                <span>${c.text}</span>
+            </div>`
+        ).join('');
+    }
+
+    function renderCompareChart(canvasId, breakdown) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        const existing = canvasId === 'chartA' ? chartA : chartB;
+        if (existing) existing.destroy();
+
+        const newChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Positive', 'Negative', 'Neutral'],
+                datasets: [{
+                    data: [breakdown.Positive, breakdown.Negative, breakdown.Neutral],
+                    backgroundColor: ['#4ade80', '#f87171', '#facc15'],
+                    borderColor: '#101820',
+                    borderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom', labels: { color: '#e6f2f7', font: { size: 11 } } } }
+            }
+        });
+
+        if (canvasId === 'chartA') chartA = newChart; else chartB = newChart;
+    }
+</script>
+</body>
+</html>
